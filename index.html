@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Charan's Study Bot</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#050810">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StudyBot">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050810;overflow-x:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
+input,button,textarea{font-family:inherit}
+input:focus,textarea:focus{outline:none}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes flame{0%,100%{transform:scale(1);filter:drop-shadow(0 0 6px #f97316)}50%{transform:scale(1.15);filter:drop-shadow(0 0 14px #fb923c)}}
+@keyframes badgePop{0%{transform:scale(0.4);opacity:0}80%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn 0.3s ease forwards}
+.flame{animation:flame 1.5s ease-in-out infinite;display:inline-block}
+.badge-pop{animation:badgePop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards}
+.slide-down{animation:slideDown 0.3s ease forwards}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback}=React;
+
+// ── CONFIG — Vercel API endpoint ──────────────────────────────────
+const API_URL="/api/chat";
+
+const DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const EXAM_DATES={GATE:new Date("2027-02-01"),UPSC:new Date("2026-05-24")};
+
+const QUOTES=[
+  {text:"Success is the sum of small efforts repeated day in and day out.",author:"Robert Collier"},
+  {text:"The expert in anything was once a beginner.",author:"Helen Hayes"},
+  {text:"It always seems impossible until it's done.",author:"Nelson Mandela"},
+  {text:"Hard work beats talent when talent doesn't work hard.",author:"Tim Notke"},
+  {text:"GATE and UPSC together? That's not ambition — that's legend.",author:"Your Study Bot 🤖"},
+  {text:"One day or day one. You decide.",author:"Unknown"},
+  {text:"Discipline is choosing between what you want now and what you want most.",author:"Unknown"},
+  {text:"Don't watch the clock; do what it does. Keep going.",author:"Sam Levenson"},
+  {text:"The secret of getting ahead is getting started.",author:"Mark Twain"},
+];
+
+const ALL_BADGES=[
+  {id:"b1",icon:"🔥",label:"First Flame",desc:"Complete all study tasks in a day",condition:s=>s.streak>=1},
+  {id:"b2",icon:"⚡",label:"7-Day Streak",desc:"7 consecutive days on target",condition:s=>s.streak>=7},
+  {id:"b3",icon:"💎",label:"14-Day Diamond",desc:"14 consecutive days on target",condition:s=>s.streak>=14},
+  {id:"b4",icon:"👑",label:"30-Day Legend",desc:"30 consecutive days on target",condition:s=>s.streak>=30},
+  {id:"b5",icon:"💻",label:"DSA Starter",desc:"Solve 10 DSA problems",condition:s=>s.dsaCount>=10},
+  {id:"b6",icon:"🧠",label:"DSA Warrior",desc:"Solve 50 DSA problems",condition:s=>s.dsaCount>=50},
+  {id:"b7",icon:"🏆",label:"DSA Master",desc:"Solve 100 DSA problems",condition:s=>s.dsaCount>=100},
+  {id:"b8",icon:"📖",label:"Polity Starter",desc:"Watch 10 UPSC lectures",condition:s=>s.upscCount>=10},
+  {id:"b9",icon:"🇮🇳",label:"Polity Scholar",desc:"Watch 30 UPSC lectures",condition:s=>s.upscCount>=30},
+  {id:"b10",icon:"🎯",label:"Polity Master",desc:"Watch 60 UPSC lectures",condition:s=>s.upscCount>=60},
+  {id:"b11",icon:"📚",label:"GATE Focused",desc:"7 days of GATE study",condition:s=>s.gateStudyDays>=7},
+];
+
+const DEFAULT_SCHEDULE={
+  Monday:[
+    {id:"mo1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"mo2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"mo3",time:"9:00–10:00 AM",task:"Cloud Computing Class",cat:"college",icon:"📡"},
+    {id:"mo4",time:"10:00–11:00 AM",task:"IoT Class",cat:"college",icon:"🌐"},
+    {id:"mo5",time:"11:00–12:00 PM",task:"Revise GATE + UPSC",cat:"study",icon:"📝"},
+    {id:"mo6",time:"12:00–1:45 PM",task:"GATE Study – Data Structures",cat:"gate",icon:"📚"},
+    {id:"mo7",time:"1:45–3:00 PM",task:"CC Tutorial",cat:"college",icon:"📡"},
+    {id:"mo8",time:"3:00–6:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"mo9",time:"6:00–8:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"mo10",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"mo11",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+  Tuesday:[
+    {id:"tu1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"tu2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"tu3",time:"9:00–10:00 AM",task:"Cloud Computing Class",cat:"college",icon:"📡"},
+    {id:"tu4",time:"10:00–11:00 AM",task:"Data Mining Class",cat:"college",icon:"🗄️"},
+    {id:"tu5",time:"11:00–12:00 PM",task:"Formal Methods Class",cat:"college",icon:"📐"},
+    {id:"tu6",time:"12:00–1:00 PM",task:"Lunch",cat:"routine",icon:"🍽️"},
+    {id:"tu7",time:"1:00–3:00 PM",task:"Revise GATE + UPSC (2 hrs)",cat:"study",icon:"📝"},
+    {id:"tu8",time:"3:00–4:00 PM",task:"Data Mining Tutorial",cat:"college",icon:"🗄️"},
+    {id:"tu9",time:"4:00–5:00 PM",task:"Formal Methods Tutorial",cat:"college",icon:"📐"},
+    {id:"tu10",time:"5:00–6:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"tu11",time:"6:00–8:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"tu12",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"tu13",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+  Wednesday:[
+    {id:"we1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"we2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"we3",time:"10:00–11:00 AM",task:"IoT Class",cat:"college",icon:"🌐"},
+    {id:"we4",time:"11:00–12:00 PM",task:"Data Mining Tutorial",cat:"college",icon:"🗄️"},
+    {id:"we5",time:"12:00–1:00 PM",task:"Formal Methods Class",cat:"college",icon:"📐"},
+    {id:"we6",time:"2:00–3:00 PM",task:"Revise GATE + UPSC",cat:"study",icon:"📝"},
+    {id:"we7",time:"3:00–4:00 PM",task:"IoT Tutorial",cat:"college",icon:"🌐"},
+    {id:"we8",time:"4:00–6:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"we9",time:"6:00–8:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"we10",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"we11",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+  Thursday:[
+    {id:"th1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"th2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"th3",time:"9:00–10:00 AM",task:"Cloud Computing Class",cat:"college",icon:"📡"},
+    {id:"th4",time:"10:00–11:00 AM",task:"Data Mining Class",cat:"college",icon:"🗄️"},
+    {id:"th5",time:"11:00–12:00 PM",task:"IoT Class",cat:"college",icon:"🌐"},
+    {id:"th6",time:"12:00–2:00 PM",task:"Revise GATE + GATE Study (2 hrs)",cat:"gate",icon:"📚"},
+    {id:"th7",time:"3:00–6:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"th8",time:"6:00–8:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"th9",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"th10",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+  Friday:[
+    {id:"fr1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"fr2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"fr3",time:"10:00–11:00 AM",task:"Data Mining Class",cat:"college",icon:"🗄️"},
+    {id:"fr4",time:"11:00–12:00 PM",task:"Revise GATE + UPSC",cat:"study",icon:"📝"},
+    {id:"fr5",time:"12:00–1:00 PM",task:"Formal Methods Class",cat:"college",icon:"📐"},
+    {id:"fr6",time:"2:00–4:00 PM",task:"GATE Study (2 hrs)",cat:"gate",icon:"📚"},
+    {id:"fr7",time:"4:00–6:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"fr8",time:"6:00–8:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"fr9",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"fr10",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+  Saturday:[
+    {id:"sa1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"sa2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"sa3",time:"9:00–10:30 AM",task:"Weekly Revision + Planning",cat:"study",icon:"📊"},
+    {id:"sa4",time:"10:30 AM–1:30 PM",task:"GATE Study (3 hrs)",cat:"gate",icon:"📚"},
+    {id:"sa5",time:"1:30–2:00 PM",task:"Lunch",cat:"routine",icon:"🍽️"},
+    {id:"sa6",time:"2:00–4:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"sa7",time:"4:00–6:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"sa8",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"sa9",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+  Sunday:[
+    {id:"su1",time:"6:00–7:30 AM",task:"Badminton",cat:"routine",icon:"🏸"},
+    {id:"su2",time:"7:30–9:00 AM",task:"Get Ready + Breakfast",cat:"routine",icon:"🧴"},
+    {id:"su3",time:"9:00–10:30 AM",task:"Weekly Revision + Planning",cat:"study",icon:"📊"},
+    {id:"su4",time:"10:30 AM–1:30 PM",task:"GATE Study (3 hrs)",cat:"gate",icon:"📚"},
+    {id:"su5",time:"1:30–2:00 PM",task:"Lunch",cat:"routine",icon:"🍽️"},
+    {id:"su6",time:"2:00–4:00 PM",task:"Striver DSA – 4 Problems",cat:"dsa",icon:"💻"},
+    {id:"su7",time:"4:00–6:30 PM",task:"UPSC Polity – Evening",cat:"upsc",icon:"🇮🇳"},
+    {id:"su8",time:"8:30–9:00 PM",task:"Dinner",cat:"routine",icon:"🍽️"},
+    {id:"su9",time:"9:00–11:30 PM",task:"UPSC Polity – Night",cat:"upsc",icon:"🇮🇳"},
+  ],
+};
+
+const DEFAULT_MONTHLY_GOALS=[
+  {id:"mg1",text:"Complete GATE Data Structures (GoClasses) by 18th April",cat:"gate"},
+  {id:"mg2",text:"Start GATE Algorithms after 18th April",cat:"gate"},
+  {id:"mg3",text:"Complete Binary Search on Striver DSA Sheet",cat:"dsa"},
+  {id:"mg4",text:"Complete Strings on Striver DSA Sheet",cat:"dsa"},
+  {id:"mg5",text:"Watch 60/180 UPSC Polity lectures by April 30",cat:"upsc"},
+];
+
+const DEFAULT_DAILY_TARGETS={gate:"3 hrs/day",dsa:"4 problems/day",upsc:"5 hrs/day"};
+
+const CAT={
+  routine:{bg:"#0f172a",border:"#1e293b",accent:"#475569",label:"Routine"},
+  college:{bg:"#0c1a2e",border:"#1e3a5f",accent:"#3b82f6",label:"College"},
+  gate:   {bg:"#0a1f0a",border:"#1a3a1a",accent:"#22c55e",label:"GATE"},
+  dsa:    {bg:"#160d2e",border:"#2d1b4e",accent:"#a855f7",label:"DSA"},
+  upsc:   {bg:"#1f0d0d",border:"#3b1f1f",accent:"#f97316",label:"UPSC"},
+  study:  {bg:"#0a1a22",border:"#1e2d3b",accent:"#06b6d4",label:"Study"},
+};
+
+const ls={
+  get:(k,d)=>{try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
+};
+const todayStr=()=>new Date().toISOString().split("T")[0];
+const getDayDate=n=>{const t=new Date(),d=new Date(t);d.setDate(t.getDate()+DAYS.indexOf(n)-t.getDay());return d;};
+const fmtShort=d=>d.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+const fmtFull=d=>d.toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const daysUntil=d=>Math.ceil((d-new Date())/(864e5));
+const genId=()=>"id_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+
+// ── COMPONENTS ────────────────────────────────────────────────────
+function Ring({pct,size=80,stroke=6,color="#22c55e",label,sub}){
+  const r=(size-stroke*2)/2,c=2*Math.PI*r,d=(pct/100)*c;
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+      <div style={{position:"relative",width:size,height:size}}>
+        <svg width={size} height={size} style={{transform:"rotate(-90deg)",position:"absolute"}}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e293b" strokeWidth={stroke}/>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+            strokeDasharray={`${d} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray 0.7s ease"}}/>
+        </svg>
+        <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:size>70?16:12,fontWeight:700,color,fontFamily:"'JetBrains Mono',monospace"}}>{pct}%</span>
+          {sub&&<span style={{fontSize:9,color:"#475569",marginTop:1}}>{sub}</span>}
+        </div>
+      </div>
+      {label&&<span style={{fontSize:10,color:"#64748b",fontWeight:600}}>{label}</span>}
+    </div>
+  );
+}
+
+function Countdown({label,date,color,icon}){
+  const days=daysUntil(date),m=Math.floor(days/30),r=days%30;
+  return(
+    <div style={{flex:1,background:"#0a1628",border:`1px solid ${color}22`,borderRadius:12,padding:"12px",overflow:"hidden",position:"relative"}}>
+      <div style={{position:"absolute",top:-8,right:-8,fontSize:44,opacity:0.06}}>{icon}</div>
+      <div style={{fontSize:9,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+      <div style={{display:"flex",alignItems:"baseline",gap:3}}>
+        <span style={{fontSize:28,fontWeight:700,color,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>{days}</span>
+        <span style={{fontSize:11,color:"#475569"}}>days</span>
+      </div>
+      <div style={{fontSize:10,color:"#334155",marginTop:3}}>{m>0?`${m}m ${r}d left`:date.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</div>
+      <div style={{marginTop:6,height:2,background:"#1e293b",borderRadius:1}}>
+        <div style={{height:"100%",width:`${Math.min(100,Math.max(2,100-days/365*100))}%`,background:color,borderRadius:1}}/>
+      </div>
+    </div>
+  );
+}
+
+function StreakBar({streak}){
+  const color=streak>=30?"#fbbf24":streak>=14?"#f97316":streak>=7?"#fb923c":"#ef4444";
+  const next=streak<7?7:streak<14?14:streak<30?30:null;
+  const msg=streak===0?"Start your streak today!":next?`${next-streak} more days to ${next===7?"⚡":next===14?"💎":"👑"} badge`:"You're a legend 👑";
+  return(
+    <div style={{background:"linear-gradient(135deg,#150800,#0a0400)",border:`1px solid ${color}33`,borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",gap:12}}>
+      <span className={streak>0?"flame":""} style={{fontSize:30}}>{streak>0?"🔥":"💤"}</span>
+      <div style={{flex:1}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+          <span style={{fontSize:24,fontWeight:700,color,fontFamily:"'JetBrains Mono',monospace"}}>{streak}</span>
+          <span style={{fontSize:11,color:"#6b3a00"}}>day streak</span>
+        </div>
+        <div style={{fontSize:10,color:"#6b3a00",marginTop:1}}>{msg}</div>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:9,color:"#6b3a00"}}>Best</div>
+        <div style={{fontSize:16,fontWeight:700,color,fontFamily:"'JetBrains Mono',monospace"}}>{ls.get("best_streak",0)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────
+function App(){
+  const today=new Date();
+  const todayName=DAYS[today.getDay()];
+  const tKey=todayStr();
+
+  const [tab,setTab]=useState("tasks");
+  const [activeDay,setActiveDay]=useState(todayName);
+  const [schedule,setSchedule]=useState(()=>ls.get("schedule_v4",DEFAULT_SCHEDULE));
+  const [monthlyGoals,setMonthlyGoals]=useState(()=>ls.get("monthly_goals_v4",DEFAULT_MONTHLY_GOALS));
+  const [dailyTargets,setDailyTargets]=useState(()=>ls.get("daily_targets_v4",DEFAULT_DAILY_TARGETS));
+  const [weeklyPlan,setWeeklyPlan]=useState(()=>ls.get("weekly_plan_v4",""));
+  const [done,setDone]=useState(()=>ls.get("done_"+tKey,{}));
+  const [carried,setCarried]=useState(()=>ls.get("carried_"+tKey,[]));
+  const [upscCount,setUpscCount]=useState(()=>ls.get("upsc_count",0));
+  const [dsaCount,setDsaCount]=useState(()=>ls.get("dsa_count",0));
+  const [streak,setStreak]=useState(()=>ls.get("streak",0));
+  const [gateStudyDays,setGateStudyDays]=useState(()=>ls.get("gate_days",0));
+  const [messages,setMessages]=useState([]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [toast,setToast]=useState(null);
+  const [newBadge,setNewBadge]=useState(null);
+  const [generatingPlan,setGeneratingPlan]=useState(false);
+  const [quote]=useState(()=>QUOTES[Math.floor(Math.random()*QUOTES.length)]);
+  const chatEnd=useRef(null);
+
+  useEffect(()=>ls.set("schedule_v4",schedule),[schedule]);
+  useEffect(()=>ls.set("monthly_goals_v4",monthlyGoals),[monthlyGoals]);
+  useEffect(()=>ls.set("daily_targets_v4",dailyTargets),[dailyTargets]);
+  useEffect(()=>ls.set("weekly_plan_v4",weeklyPlan),[weeklyPlan]);
+  useEffect(()=>ls.set("done_"+tKey,done),[done,tKey]);
+  useEffect(()=>ls.set("upsc_count",upscCount),[upscCount]);
+  useEffect(()=>ls.set("dsa_count",dsaCount),[dsaCount]);
+  useEffect(()=>ls.set("streak",streak),[streak]);
+  useEffect(()=>ls.set("gate_days",gateStudyDays),[gateStudyDays]);
+  useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[messages]);
+
+  useEffect(()=>{
+    const last=ls.get("last_active","");
+    const yest=new Date(today);yest.setDate(today.getDate()-1);
+    if(last&&last!==tKey&&last!==yest.toISOString().split("T")[0]){setStreak(0);ls.set("streak",0);}
+  },[]);
+
+  const stats={streak,dsaCount,upscCount,gateStudyDays};
+  const earned=ALL_BADGES.filter(b=>b.condition(stats));
+  const prevEarned=ls.get("earned_badges",[]);
+  useEffect(()=>{
+    const fresh=earned.filter(b=>!prevEarned.includes(b.id));
+    if(fresh.length){setNewBadge(fresh[0]);ls.set("earned_badges",earned.map(b=>b.id));setTimeout(()=>setNewBadge(null),4000);}
+  },[streak,dsaCount,upscCount,gateStudyDays]);
+
+  useEffect(()=>{
+    const gKey="greeted_v4_"+tKey;
+    if(!ls.get(gKey,false)){
+      setMessages([{role:"bot",text:`🌅 Good morning Charan!\n\n${fmtFull(today)}\n\n🔥 Streak: ${streak} days\n📖 UPSC: ${upscCount}/60 lectures\n💻 DSA: ${dsaCount} problems\n⏰ ${daysUntil(EXAM_DATES.UPSC)} days to UPSC Prelims!\n\nTargets today: GATE ${dailyTargets.gate} | DSA ${dailyTargets.dsa} | UPSC ${dailyTargets.upsc}\n\n💬 You can tell me:\n• "Add yoga at 5 AM daily"\n• "Change GATE to 4 hrs/day"\n• "Update monthly goal to finish OS by May"\n• "Move DSA to 7 PM on Friday"\n• "Generate weekly plan"\n• "Done with UPSC today"\n\nLet's crush it! 💪`}]);
+      ls.set(gKey,true);
+    }else{
+      setMessages([{role:"bot",text:`👋 Hey Charan!\n🔥 ${streak} day streak | 📖 ${upscCount}/60 | 💻 ${dsaCount}\n\nWhat would you like to update today?`}]);
+    }
+  },[]);
+
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2500);};
+
+  const getSchedule=useCallback(day=>{
+    const base=schedule[day]||[];
+    const carry=day===todayName?carried.map(t=>({...t,carried:true})):[];
+    return [...carry,...base];
+  },[schedule,carried,todayName]);
+
+  const getProgress=useCallback(day=>{
+    const tasks=getSchedule(day).filter(t=>["gate","dsa","upsc","study"].includes(t.cat));
+    const n=tasks.filter(t=>done[t.id]).length;
+    return{done:n,total:tasks.length,pct:tasks.length?Math.round(n/tasks.length*100):0};
+  },[getSchedule,done]);
+
+  const toggleTask=id=>{
+    const nd={...done,[id]:!done[id]};setDone(nd);
+    const tasks=getSchedule(todayName).filter(t=>["gate","dsa","upsc","study"].includes(t.cat));
+    if(tasks.every(t=>nd[t.id])){
+      const ns=streak+1;setStreak(ns);
+      if(ns>ls.get("best_streak",0))ls.set("best_streak",ns);
+      ls.set("last_active",tKey);
+      showToast(`🔥 All done! Streak: ${ns} days!`);
+    }else showToast(done[id]?"Unmarked":"✅ Done!");
+  };
+
+  // ── Apply AI actions ──────────────────────────────────────────
+  const applyActions=useCallback((actions)=>{
+    if(!Array.isArray(actions))return;
+    actions.forEach(a=>{
+      switch(a.type){
+        case "add_task":{
+          const t={id:genId(),time:a.time||"",task:a.task,cat:a.cat||"study",icon:a.icon||"➕"};
+          setSchedule(p=>({...p,[a.day||todayName]:[...(p[a.day||todayName]||[]),t]}));
+          showToast(`✅ Added "${a.task}" to ${a.day||"today"}`);break;
+        }
+        case "remove_task":
+          setSchedule(p=>({...p,[a.day||todayName]:(p[a.day||todayName]||[]).filter(t=>!t.task.toLowerCase().includes(a.keyword.toLowerCase()))}));
+          showToast(`🗑️ Removed from ${a.day||"today"}`);break;
+        case "edit_task":
+          setSchedule(p=>({...p,[a.day||todayName]:(p[a.day||todayName]||[]).map(t=>t.task.toLowerCase().includes(a.keyword.toLowerCase())?{...t,...(a.newTime&&{time:a.newTime}),...(a.newTask&&{task:a.newTask})}:t)}));
+          showToast(`✏️ Updated task`);break;
+        case "replace_day":{
+          const tasks=(a.tasks||[]).map(t=>({id:genId(),time:t.time||"",task:t.task,cat:t.cat||"study",icon:t.icon||"📌"}));
+          setSchedule(p=>({...p,[a.day||todayName]:tasks}));
+          showToast(`📅 ${a.day||"Today"} schedule updated!`);break;
+        }
+        case "add_goal":
+          setMonthlyGoals(p=>[...p,{id:genId(),text:a.text,cat:a.cat||"study"}]);
+          showToast("🎯 Goal added!");break;
+        case "remove_goal":
+          setMonthlyGoals(p=>p.filter(g=>!g.text.toLowerCase().includes(a.keyword.toLowerCase())));
+          showToast("🗑️ Goal removed");break;
+        case "replace_goals":
+          setMonthlyGoals((a.goals||[]).map(g=>({id:genId(),text:g.text||g,cat:g.cat||"study"})));
+          showToast("🎯 Goals updated!");break;
+        case "update_targets":
+          setDailyTargets(p=>({...p,...a.targets}));
+          showToast("📊 Targets updated!");break;
+        case "set_weekly_plan":
+          setWeeklyPlan(a.plan);setTab("planner");
+          showToast("🗓️ Weekly plan updated!");break;
+        case "carry_forward":{
+          const pending=getSchedule(todayName).filter(t=>["gate","dsa","upsc","study"].includes(t.cat)&&!done[t.id]);
+          if(pending.length){const tmrw=new Date(today);tmrw.setDate(today.getDate()+1);ls.set("carried_"+tmrw.toISOString().split("T")[0],pending.map(t=>({...t,id:t.id+"_co",task:"↩ "+t.task})));showToast(`📋 ${pending.length} tasks carried forward`);}
+          break;
+        }
+        case "log_upsc": setUpscCount(p=>p+(a.count||1));showToast(`📖 +${a.count||1} UPSC lecture`);break;
+        case "log_dsa":  setDsaCount(p=>p+(a.count||1));showToast(`💻 +${a.count||1} DSA problem`);break;
+        default:break;
+      }
+    });
+  },[getSchedule,done,todayName,today,tKey]);
+
+  // ── Send message ──────────────────────────────────────────────
+  const sendMsg=async(text)=>{
+    if(!text.trim()||loading)return;
+    const userText=text.trim();
+    setInput("");
+    setMessages(p=>[...p,{role:"user",text:userText}]);
+    setLoading(true);
+
+    const prog=getProgress(todayName);
+    const sched=getSchedule(todayName);
+    const doneTasks=sched.filter(t=>done[t.id]).map(t=>t.task);
+    const pendingTasks=sched.filter(t=>["gate","dsa","upsc","study"].includes(t.cat)&&!done[t.id]).map(t=>t.task);
+
+    const systemPrompt=`You are Charan's personal AI study assistant. You can DYNAMICALLY CHANGE everything in his study app.
+
+CURRENT STATE:
+Date: ${todayName}, ${fmtFull(today)}
+Progress: ${prog.done}/${prog.total} tasks (${prog.pct}%)
+Completed: ${doneTasks.join(", ")||"None"}
+Pending: ${pendingTasks.join(", ")||"All done!"}
+Streak: ${streak} days | UPSC: ${upscCount}/60 | DSA: ${dsaCount}
+Days to GATE: ${daysUntil(EXAM_DATES.GATE)} | Days to UPSC: ${daysUntil(EXAM_DATES.UPSC)}
+Daily targets: ${JSON.stringify(dailyTargets)}
+Monthly goals: ${monthlyGoals.map(g=>g.text).join(" | ")}
+Today's schedule: ${JSON.stringify((schedule[todayName]||[]).map(t=>({time:t.time,task:t.task,cat:t.cat})))}
+
+WHAT YOU CAN DO — after your response include actions in this format:
+<<<ACTIONS>>>
+[array of action objects]
+<<<END>>>
+
+AVAILABLE ACTIONS:
+{"type":"add_task","day":"Monday","time":"5:00 AM","task":"Yoga","cat":"routine","icon":"🧘"}
+{"type":"remove_task","day":"Monday","keyword":"Yoga"}
+{"type":"edit_task","day":"Monday","keyword":"DSA","newTime":"7:00 PM","newTask":"Striver DSA – 6 Problems"}
+{"type":"replace_day","day":"Monday","tasks":[{"time":"6 AM","task":"Badminton","cat":"routine","icon":"🏸"},...]}
+{"type":"add_goal","text":"Complete OS by May","cat":"gate"}
+{"type":"remove_goal","keyword":"Binary Search"}
+{"type":"replace_goals","goals":[{"text":"New goal 1","cat":"gate"},{"text":"New goal 2","cat":"upsc"}]}
+{"type":"update_targets","targets":{"gate":"4 hrs/day","dsa":"5 problems/day","upsc":"6 hrs/day"}}
+{"type":"set_weekly_plan","plan":"Monday: ...\nTuesday: ..."}
+{"type":"carry_forward"}
+{"type":"log_upsc","count":1}
+{"type":"log_dsa","count":4}
+
+Be concise (3-4 lines), warm, and practical. Only include <<<ACTIONS>>> if changes are needed.`;
+
+    try{
+      const res=await fetch(API_URL,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          system:systemPrompt,
+          max_tokens:2000,
+          messages:[
+            ...messages.slice(-8).map(m=>({role:m.role==="bot"?"assistant":"user",content:m.text})),
+            {role:"user",content:userText}
+          ]
+        })
+      });
+
+      if(!res.ok){
+        const err=await res.text();
+        throw new Error(`HTTP ${res.status}: ${err}`);
+      }
+
+      const data=await res.json();
+      if(data.error) throw new Error(data.error+(data.details?": "+data.details:""));
+
+      let reply=data.content?.[0]?.text||"No response.";
+
+      const actionMatch=reply.match(/<<<ACTIONS>>>([\s\S]*?)<<<END>>>/);
+      if(actionMatch){
+        try{
+          const actions=JSON.parse(actionMatch[1].trim());
+          reply=reply.replace(/<<<ACTIONS>>>[\s\S]*?<<<END>>>/,"").trim();
+          applyActions(actions);
+        }catch(e){console.warn("Action parse error:",e);}
+      }
+
+      if(userText.toLowerCase().includes("night summary")||userText.toLowerCase().includes("carry forward")){
+        applyActions([{type:"carry_forward"}]);
+        ls.set("last_active",tKey);
+      }
+
+      setMessages(p=>[...p,{role:"bot",text:reply}]);
+    }catch(e){
+      console.error(e);
+      setMessages(p=>[...p,{role:"bot",text:`❌ ${e.message}\n\nCheck Vercel → Project Settings → Environment Variables → GROQ_API_KEY is set, then redeploy.`}]);
+    }
+    setLoading(false);
+  };
+
+  // ── Generate weekly plan ──
+  const generateWeeklyPlan=async()=>{
+    setGeneratingPlan(true);setTab("planner");
+    const pending=getSchedule(todayName).filter(t=>["gate","dsa","upsc","study"].includes(t.cat)&&!done[t.id]).map(t=>t.task);
+    try{
+      const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        max_tokens:1500,
+        messages:[{role:"user",content:`Generate a smart personalized weekly study plan for Charan.
+IIT Roorkee student | GATE CS 2027 + UPSC Prelims May 2026
+Streak: ${streak} | UPSC: ${upscCount}/60 | DSA: ${dsaCount}
+Days to GATE: ${daysUntil(EXAM_DATES.GATE)} | Days to UPSC: ${daysUntil(EXAM_DATES.UPSC)}
+Goals: ${monthlyGoals.map(g=>g.text).join(" | ")}
+Pending today: ${pending.join(", ")||"None"}
+Targets: GATE ${dailyTargets.gate} | DSA ${dailyTargets.dsa} | UPSC ${dailyTargets.upsc}
+College: Mon/Thu(CC+IoT+DM) Tue(CC+DM+FM) Wed(IoT+DM+FM) Fri(DM+FM) Sat/Sun free
+
+Give a specific day-by-day Mon–Sun plan with topics, chapters, problem sets. Use emojis. Make it motivating.`}]
+      })});
+      const data=await res.json();
+      setWeeklyPlan(data.content?.[0]?.text||"Could not generate plan.");
+    }catch(e){setWeeklyPlan("Error: "+e.message);}
+    setGeneratingPlan(false);
+  };
+
+  const todayProg=getProgress(todayName);
+  const prog=getProgress(activeDay);
+  const upscPct=Math.round((upscCount/60)*100);
+  const dsaPct=Math.min(100,Math.round((dsaCount/100)*100));
+
+  return(
+    <div style={{minHeight:"100vh",background:"#050810",color:"#e2e8f0",fontFamily:"'Space Grotesk',sans-serif",display:"flex",flexDirection:"column",maxWidth:520,margin:"0 auto"}}>
+
+      {newBadge&&(
+        <div className="badge-pop" style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#1a1a00,#2a1500)",border:"1px solid #fbbf2466",borderRadius:16,padding:"12px 20px",zIndex:300,textAlign:"center",boxShadow:"0 8px 32px #000000aa"}}>
+          <div style={{fontSize:30}}>{newBadge.icon}</div>
+          <div style={{fontSize:13,fontWeight:700,color:"#fbbf24",marginTop:3}}>Badge Unlocked!</div>
+          <div style={{fontSize:11,color:"#92400e"}}>{newBadge.label}</div>
+        </div>
+      )}
+
+      {toast&&(
+        <div className="slide-down" style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"#0a1f0a",border:"1px solid #22c55e44",color:"#4ade80",padding:"8px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:200,whiteSpace:"nowrap"}}>{toast}</div>
+      )}
+
+      {/* HEADER */}
+      <div style={{padding:"14px 16px 12px",background:"linear-gradient(180deg,#0d1424,#050810)",borderBottom:"1px solid #0f1e38"}}>
+        <div style={{background:"#0a1628",border:"1px solid #1e3050",borderRadius:10,padding:"8px 12px",marginBottom:12}}>
+          <div style={{fontSize:11,color:"#60a5fa",fontStyle:"italic",lineHeight:1.5}}>"{quote.text}"</div>
+          <div style={{fontSize:10,color:"#1e3050",marginTop:2}}>— {quote.author}</div>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:9,color:"#1e3050",letterSpacing:3,textTransform:"uppercase"}}>Study Command Center</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#f1f5f9",marginTop:2}}>Hey Charan 👋</div>
+            <div style={{fontSize:11,color:"#1e3050",marginTop:2}}>{fmtFull(today)}</div>
+          </div>
+          <Ring pct={todayProg.pct} size={64} stroke={5} color="#22c55e" sub="today"/>
+        </div>
+        <StreakBar streak={streak}/>
+        <div style={{display:"flex",gap:6,marginTop:10}}>
+          {[{l:"UPSC",v:`${upscCount}/60`,c:"#f97316",p:upscPct},{l:"DSA",v:`${dsaCount}`,c:"#a855f7",p:dsaPct},{l:"Tasks",v:`${todayProg.done}/${todayProg.total}`,c:"#22c55e",p:todayProg.pct}].map(s=>(
+            <div key={s.l} style={{flex:1,background:"#0a1628",border:"1px solid #1e293b",borderRadius:10,padding:"7px 8px"}}>
+              <div style={{fontSize:12,fontWeight:700,color:s.c,fontFamily:"'JetBrains Mono',monospace"}}>{s.v}</div>
+              <div style={{height:2,background:"#1e293b",borderRadius:1,margin:"3px 0 2px"}}><div style={{height:"100%",width:`${s.p}%`,background:s.c,borderRadius:1,transition:"width 0.5s"}}/></div>
+              <div style={{fontSize:9,color:"#334155"}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* DAY SELECTOR */}
+      <div style={{display:"flex",overflowX:"auto",padding:"8px 10px",gap:5,borderBottom:"1px solid #0f1e38"}}>
+        {DAYS.map(d=>{
+          const dd=getDayDate(d),isT=d===todayName,isA=d===activeDay,p=getProgress(d);
+          return(
+            <button key={d} onClick={()=>setActiveDay(d)} style={{padding:"5px 8px",borderRadius:9,border:"1px solid",borderColor:isA?"#22c55e":isT?"#1e3050":"#0f1e38",background:isA?"#0a2a0a":isT?"#0a1628":"transparent",color:isA?"#22c55e":isT?"#60a5fa":"#334155",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",gap:1,minWidth:44,transition:"all 0.2s"}}>
+              <span style={{fontWeight:700,fontSize:10}}>{d.slice(0,3)}{isT?" •":""}</span>
+              <span style={{fontSize:9,opacity:0.7}}>{fmtShort(dd)}</span>
+              <div style={{width:20,height:2,background:"#1e293b",borderRadius:1,marginTop:1}}><div style={{height:"100%",width:`${p.pct}%`,background:isA?"#22c55e":"#1e3050",borderRadius:1}}/></div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TABS */}
+      <div style={{display:"flex",borderBottom:"1px solid #0f1e38",overflowX:"auto"}}>
+        {[["tasks","📋","Tasks"],["chat","💬","Chat"],["dashboard","📊","Stats"],["badges","🏆","Badges"],["planner","🗓️","Planner"],["goals","🎯","Goals"]].map(([v,icon,lbl])=>(
+          <button key={v} onClick={()=>setTab(v)} style={{flex:1,padding:"8px 2px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===v?"#22c55e":"transparent"}`,color:tab===v?"#22c55e":"#334155",fontSize:9,cursor:"pointer",fontFamily:"inherit",textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap",transition:"all 0.2s"}}>{icon} {lbl}</button>
+        ))}
+      </div>
+
+      {/* CONTENT */}
+      <div style={{flex:1,overflow:"auto",padding:"12px 14px"}}>
+
+        {tab==="tasks"&&(
+          <div className="fade-in">
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <Countdown label="GATE 2027" date={EXAM_DATES.GATE} color="#22c55e" icon="📚"/>
+              <Countdown label="UPSC Prelims" date={EXAM_DATES.UPSC} color="#f97316" icon="🇮🇳"/>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <button onClick={()=>{setUpscCount(p=>p+1);showToast("📖 Lecture logged!");}} style={{flex:1,padding:"9px",background:"#1f0d0d",border:"1px solid #3b1f1f",borderRadius:10,color:"#f97316",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ UPSC Lecture<br/><span style={{fontSize:10,opacity:0.6}}>{upscCount}/60</span></button>
+              <button onClick={()=>{setDsaCount(p=>p+1);showToast("💻 Problem logged!");}} style={{flex:1,padding:"9px",background:"#160d2e",border:"1px solid #2d1b4e",borderRadius:10,color:"#a855f7",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ DSA Problem<br/><span style={{fontSize:10,opacity:0.6}}>{dsaCount} total</span></button>
+            </div>
+            {carried.length>0&&activeDay===todayName&&(
+              <div style={{marginBottom:10,padding:10,background:"#1a0d00",borderRadius:10,border:"1px solid #f9731644"}}>
+                <div style={{fontSize:10,color:"#f97316",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>↩ Carried from yesterday</div>
+                {carried.map(t=><div key={t.id} style={{fontSize:12,color:"#fed7aa",padding:"1px 0"}}>• {t.task}</div>)}
+              </div>
+            )}
+            {getSchedule(activeDay).length===0?(
+              <div style={{textAlign:"center",padding:"40px 20px",color:"#1e3050"}}>
+                <div style={{fontSize:32,marginBottom:8}}>📭</div>
+                <div style={{fontSize:13}}>No tasks for {activeDay}.<br/>Tell the chat to add some!</div>
+              </div>
+            ):getSchedule(activeDay).map((item,i)=>{
+              const cat=CAT[item.cat]||CAT.study,isDone=!!done[item.id],isStudy=["gate","dsa","upsc","study"].includes(item.cat);
+              return(
+                <div key={item.id} onClick={()=>isStudy&&toggleTask(item.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",marginBottom:5,background:isDone?"#0a1f0a":cat.bg,borderRadius:11,border:`1px solid ${isDone?"#22c55e33":cat.border}`,cursor:isStudy?"pointer":"default",opacity:isDone?0.6:1,transition:"all 0.2s",animation:`fadeIn 0.25s ease ${i*0.02}s both`}}>
+                  <span style={{fontSize:15,flexShrink:0}}>{item.icon||"📌"}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:isDone?"#4ade80":"#e2e8f0",textDecoration:isDone?"line-through":"none"}}>{item.task}</div>
+                    <div style={{fontSize:10,color:"#334155",marginTop:1,fontFamily:"'JetBrains Mono',monospace"}}>{item.time}</div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+                    <span style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:cat.accent+"22",color:cat.accent}}>{cat.label}</span>
+                    {isStudy&&<div style={{width:15,height:15,borderRadius:"50%",border:`2px solid ${isDone?"#22c55e":cat.accent+"55"}`,background:isDone?"#22c55e":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#000",fontWeight:700}}>{isDone&&"✓"}</div>}
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={()=>{setTab("chat");sendMsg("Generate my night summary and carry forward pending tasks");}} style={{width:"100%",marginTop:10,padding:"12px",background:"linear-gradient(135deg,#0d1f2d,#080c14)",border:"1px solid #1e3050",borderRadius:12,color:"#60a5fa",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>🌙 Night Summary & Carry Forward</button>
+          </div>
+        )}
+
+        {tab==="chat"&&(
+          <div className="fade-in" style={{display:"flex",flexDirection:"column",height:"calc(100vh - 400px)",minHeight:260}}>
+            <div style={{background:"#0a1628",border:"1px solid #1e3050",borderRadius:10,padding:"8px 10px",marginBottom:10,fontSize:11,color:"#334155",lineHeight:1.7}}>
+              💡 <span style={{color:"#60a5fa"}}>Try:</span> "Add yoga at 5 AM" • "Change GATE to 4 hrs" • "Move DSA to 7 PM Fri" • "Update monthly goals" • "Generate weekly plan"
+            </div>
+            <div style={{flex:1,overflow:"auto",display:"flex",flexDirection:"column",gap:8,paddingBottom:6}}>
+              {messages.map((m,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",alignItems:"flex-end",gap:6}}>
+                  {m.role==="bot"&&<div style={{width:24,height:24,borderRadius:"50%",background:"#0a2a0a",border:"1px solid #22c55e22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0}}>🤖</div>}
+                  <div style={{maxWidth:"82%",padding:"9px 12px",borderRadius:m.role==="user"?"14px 14px 3px 14px":"3px 14px 14px 14px",background:m.role==="user"?"#0a2a0a":"#0a1628",border:`1px solid ${m.role==="user"?"#22c55e22":"#1e3050"}`,fontSize:13,lineHeight:1.7,color:"#e2e8f0",whiteSpace:"pre-wrap"}}>{m.text}</div>
+                </div>
+              ))}
+              {loading&&(
+                <div style={{display:"flex",alignItems:"flex-end",gap:6}}>
+                  <div style={{width:24,height:24,borderRadius:"50%",background:"#0a2a0a",border:"1px solid #22c55e22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>🤖</div>
+                  <div style={{padding:"9px 13px",background:"#0a1628",borderRadius:"3px 14px 14px 14px",border:"1px solid #1e3050"}}>
+                    <div style={{display:"flex",gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:"#334155",animation:`pulse 1.4s ease ${i*0.2}s infinite`}}/>)}</div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEnd}/>
+            </div>
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg(input)} placeholder="Change schedule, add tasks, update goals..." style={{flex:1,padding:"10px 13px",background:"#0a1628",border:"1px solid #1e3050",borderRadius:20,color:"#e2e8f0",fontSize:13}}/>
+              <button onClick={()=>sendMsg(input)} disabled={loading} style={{padding:"10px 16px",background:"#22c55e",border:"none",borderRadius:20,color:"#000",fontSize:14,fontWeight:700,cursor:"pointer"}}>→</button>
+            </div>
+            <div style={{display:"flex",gap:5,marginTop:7,flexWrap:"wrap"}}>
+              {["Done with DSA ✅","Completed UPSC ✅","Add 30 mins CC at 2 PM Wed","Night summary 🌙","Generate weekly plan"].map(q=>(
+                <button key={q} onClick={()=>sendMsg(q)} style={{padding:"4px 9px",background:"#0a1628",border:"1px solid #1e3050",borderRadius:10,color:"#334155",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>{q}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab==="dashboard"&&(
+          <div className="fade-in">
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <Countdown label="GATE 2027" date={EXAM_DATES.GATE} color="#22c55e" icon="📚"/>
+              <Countdown label="UPSC Prelims" date={EXAM_DATES.UPSC} color="#f97316" icon="🇮🇳"/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-around",padding:16,background:"#0a1628",borderRadius:14,border:"1px solid #1e293b",marginBottom:14}}>
+              <Ring pct={upscPct} size={76} color="#f97316" label="UPSC" sub={`${upscCount}/60`}/>
+              <Ring pct={todayProg.pct} size={76} color="#22c55e" label="Today" sub={`${todayProg.done}/${todayProg.total}`}/>
+              <Ring pct={dsaPct} size={76} color="#a855f7" label="DSA" sub={`${dsaCount}/100`}/>
+            </div>
+            <div style={{background:"#0a1628",borderRadius:14,border:"1px solid #1e293b",padding:14,marginBottom:14}}>
+              <div style={{fontSize:10,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>This Week</div>
+              {DAYS.slice(1).concat(DAYS[0]).map(d=>{
+                const p=getProgress(d),isT=d===todayName;
+                return(
+                  <div key={d} style={{display:"flex",alignItems:"center",gap:10,marginBottom:7}}>
+                    <div style={{width:28,fontSize:11,color:isT?"#22c55e":"#334155",fontWeight:isT?700:400}}>{d.slice(0,3)}</div>
+                    <div style={{flex:1,height:5,background:"#0f172a",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.pct}%`,background:isT?"#22c55e":p.pct===100?"#06b6d4":"#1e3050",borderRadius:3,transition:"width 0.5s"}}/></div>
+                    <div style={{width:32,fontSize:11,color:"#334155",textAlign:"right",fontFamily:"'JetBrains Mono',monospace"}}>{p.pct}%</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{background:"#0a1628",borderRadius:14,border:"1px solid #1e293b",padding:14}}>
+              <div style={{fontSize:10,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Daily Targets</div>
+              {[{l:"GATE",v:dailyTargets.gate,c:"#22c55e",i:"📚"},{l:"Striver DSA",v:dailyTargets.dsa,c:"#a855f7",i:"💻"},{l:"UPSC Polity",v:dailyTargets.upsc,c:"#f97316",i:"🇮🇳"}].map(t=>(
+                <div key={t.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #0f172a"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}><span>{t.i}</span><span style={{fontSize:13,color:"#64748b"}}>{t.l}</span></div>
+                  <span style={{fontSize:13,color:t.c,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{t.v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab==="badges"&&(
+          <div className="fade-in">
+            <div style={{marginBottom:14}}><StreakBar streak={streak}/></div>
+            <div style={{fontSize:10,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Earned ({earned.length}/{ALL_BADGES.length})</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+              {earned.map(b=>(
+                <div key={b.id} style={{background:"linear-gradient(135deg,#1a1a00,#2a1500)",border:"1px solid #fbbf2444",borderRadius:12,padding:"12px",textAlign:"center"}}>
+                  <div style={{fontSize:28,marginBottom:4}}>{b.icon}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#fbbf24"}}>{b.label}</div>
+                  <div style={{fontSize:10,color:"#78350f",marginTop:2}}>{b.desc}</div>
+                </div>
+              ))}
+              {earned.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",padding:"30px",color:"#1e3050"}}><div style={{fontSize:28,marginBottom:6}}>🏆</div><div style={{fontSize:13}}>Complete tasks to earn badges!</div></div>}
+            </div>
+            <div style={{fontSize:10,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Locked ({ALL_BADGES.length-earned.length})</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {ALL_BADGES.filter(b=>!earned.find(e=>e.id===b.id)).map(b=>(
+                <div key={b.id} style={{background:"#0a1628",border:"1px solid #1e293b",borderRadius:12,padding:"12px",textAlign:"center",opacity:0.4}}>
+                  <div style={{fontSize:28,marginBottom:4,filter:"grayscale(1)"}}>{b.icon}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#475569"}}>{b.label}</div>
+                  <div style={{fontSize:10,color:"#1e293b",marginTop:2}}>{b.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab==="planner"&&(
+          <div className="fade-in">
+            <div style={{background:"#0a1628",border:"1px solid #1e3050",borderRadius:14,padding:14,marginBottom:12}}>
+              <div style={{fontSize:13,color:"#60a5fa",fontWeight:600,marginBottom:6}}>🧠 AI Weekly Planner</div>
+              <div style={{fontSize:12,color:"#334155",lineHeight:1.7,marginBottom:12}}>Generates a personalized Mon–Sun plan based on your progress, exam countdown, and missed tasks.</div>
+              <button onClick={generateWeeklyPlan} disabled={generatingPlan} style={{width:"100%",padding:"12px",background:generatingPlan?"#0a1628":"linear-gradient(135deg,#0a2a0a,#152a15)",border:"1px solid #22c55e44",borderRadius:10,color:generatingPlan?"#334155":"#22c55e",fontSize:13,fontWeight:600,cursor:generatingPlan?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                {generatingPlan?"⏳ Generating...":"🗓️ Generate This Week's Plan"}
+              </button>
+            </div>
+            {weeklyPlan?(
+              <div style={{background:"#0a1628",border:"1px solid #1e3050",borderRadius:14,padding:14}}>
+                <div style={{fontSize:10,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Your Plan — {today.toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</div>
+                <div style={{fontSize:13,color:"#94a3b8",lineHeight:1.9,whiteSpace:"pre-wrap"}}>{weeklyPlan}</div>
+              </div>
+            ):(
+              <div style={{textAlign:"center",padding:"40px 20px",color:"#1e3050"}}>
+                <div style={{fontSize:40,marginBottom:10}}>🗓️</div>
+                <div style={{fontSize:13}}>No plan yet. Generate one above!</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==="goals"&&(
+          <div className="fade-in">
+            <div style={{fontSize:10,color:"#334155",letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Monthly Goals</div>
+            {monthlyGoals.map((g,i)=>{
+              const cat=CAT[g.cat]||CAT.study;
+              return(
+                <div key={g.id} style={{padding:"12px 14px",marginBottom:8,background:cat.bg,borderRadius:12,border:`1px solid ${cat.border}`,animation:`fadeIn 0.3s ease ${i*0.06}s both`}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:cat.accent,flexShrink:0,marginTop:4}}/>
+                    <div style={{fontSize:13,color:"#e2e8f0",lineHeight:1.5}}>{g.text}</div>
+                  </div>
+                  <div style={{marginTop:6}}><span style={{fontSize:9,padding:"2px 7px",borderRadius:6,background:cat.accent+"22",color:cat.accent}}>{cat.label}</span></div>
+                </div>
+              );
+            })}
+            <div style={{marginTop:12,padding:12,background:"#0a1628",borderRadius:12,border:"1px solid #1e3050"}}>
+              <div style={{fontSize:12,color:"#60a5fa",marginBottom:6,fontWeight:600}}>💬 Change goals via chat</div>
+              <div style={{fontSize:11,color:"#334155",lineHeight:1.8}}>"Add goal: Complete OS by May 5"<br/>"Remove the Binary Search goal"<br/>"Replace all goals with..."</div>
+            </div>
+            <div style={{marginTop:12,padding:14,background:"#1f0d0d",borderRadius:14,border:"1px solid #3b1f1f"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#f97316"}}>🇮🇳 UPSC Lecture Counter</div>
+                  <div style={{fontSize:10,color:"#7f1d1d",marginTop:2}}>Target: 60 by April 30</div>
+                </div>
+                <div style={{fontSize:26,fontWeight:700,color:"#f97316",fontFamily:"'JetBrains Mono',monospace"}}>{upscCount}<span style={{fontSize:14,color:"#7f1d1d"}}>/60</span></div>
+              </div>
+              <div style={{height:6,background:"#3b1f1f",borderRadius:3,overflow:"hidden",marginBottom:10}}>
+                <div style={{height:"100%",width:`${upscPct}%`,background:"linear-gradient(90deg,#f97316,#fb923c)",borderRadius:3,transition:"width 0.5s"}}/>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>{setUpscCount(p=>p+1);showToast("📖 Lecture logged!");}} style={{flex:1,padding:"9px",background:"#3b1f1f",border:"1px solid #f9731444",borderRadius:10,color:"#f97316",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ Watched a Lecture</button>
+                <button onClick={()=>setUpscCount(p=>Math.max(0,p-1))} style={{padding:"9px 13px",background:"transparent",border:"1px solid #3b1f1f",borderRadius:10,color:"#7f1d1d",cursor:"pointer",fontFamily:"inherit"}}>−</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
