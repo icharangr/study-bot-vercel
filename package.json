@@ -1,0 +1,9 @@
+{
+  "name": "charan-study-bot",
+  "version": "4.0.0",
+  "description": "Charan's GATE + UPSC Study Command Center",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
