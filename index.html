@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Charan's Study Bot</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#050810">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StudyBot">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{background:#050810;overflow-x:hidden;font-family:'Space Grotesk',sans-serif}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}input,button,textarea{font-family:inherit}input:focus,textarea:focus{outline:none}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}@keyframes flame{0%,100%{transform:scale(1);filter:drop-shadow(0 0 6px #f97316)}50%{transform:scale(1.15);filter:drop-shadow(0 0 14px #fb923c)}}@keyframes badgePop{0%{transform:scale(0.4);opacity:0}80%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}.fade-in{animation:fadeIn 0.3s ease forwards}.flame{animation:flame 1.5s ease-in-out infinite;display:inline-block}.badge-pop{animation:badgePop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards}.slide-down{animation:slideDown 0.3s ease forwards}
+#loading{display:flex;align-items:center;justify-content:center;min-height:100vh;color:#334155;font-size:14px}
+</style>
+</head>
+<body>
+<div id="root"><div id="loading">Loading Study Bot...</div></div>
+<script src="/app.js"></script>
+</body>
+</html>
